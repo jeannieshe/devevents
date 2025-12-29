@@ -1,4 +1,9 @@
 import BookEvent from '@/components/BookEvent';
+import EventCard from '@/components/EventCard';
+import { IEvent } from '@/database/event.model';
+import { getSimilarEventsBySlug } from '@/lib/actions/event.actions';
+import { cacheLife } from 'next/cache';
+import { responseCookiesToRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import React from 'react'
@@ -31,14 +36,26 @@ const EventTags = ({ tags }: {tags: string[] }) => (
   </div>
 )
 
-const bookings = 10;
-
 const EventDetailsPage = async ({ params }: { params: Promise<{ slug: string }>}) => {
+  'use cache'
+  cacheLife('hours')
+
   const { slug } = await params;
   const request = await fetch(`${BASE_URL}/api/events/${slug}`);
-  const { event: { description, image, overview, date, time, location, mode, agenda, audience, organizer, tags } } = await request.json();
+  const response = await request.json();
+
+  let event;
+  event = response.event;
+
+  const { description, image, overview, date, time, location, mode, agenda, audience, organizer, tags } = event;
 
   if(!description) return notFound();
+
+  const bookings = 10;
+
+  const similarEvents: IEvent[] = await getSimilarEventsBySlug(slug);
+
+  console.log({similarEvents})
 
   return (
     <section id="event">
@@ -66,14 +83,14 @@ const EventDetailsPage = async ({ params }: { params: Promise<{ slug: string }>}
             <EventDetailItem icon="/icons/audience.svg" alt="audience" label={audience} />
           </section>
 
-          <EventAgenda agendaItems={JSON.parse(agenda[0])}/>
+          <EventAgenda agendaItems={agenda}/>
 
           <section className="flex-col-gap-2">
             <h2>About the Organizer</h2>
             <p>{organizer}</p>
           </section>
 
-          <EventTags tags={JSON.parse(tags[0])} />
+          <EventTags tags={tags} />
 
         </div>
         {/* Right Side - Booking Form */}
@@ -87,9 +104,18 @@ const EventDetailsPage = async ({ params }: { params: Promise<{ slug: string }>}
               ): (
                 <p className="text-sm">Be the first to book your spot!</p>
               )}
-              <BookEvent />
+              <BookEvent eventId={event._id} slug={slug} />
             </div>
           </aside>
+      </div>
+
+      <div className="flex w-full flex-col gap-4 pt-20">
+        <h2>Similar Events</h2>
+        <div className="events">
+          {similarEvents.length > 0 && similarEvents.map((similarEvent: IEvent) => (
+            <EventCard key={similarEvent.title} {...similarEvent} />
+          ))}
+        </div>
       </div>
     </section>
   )
